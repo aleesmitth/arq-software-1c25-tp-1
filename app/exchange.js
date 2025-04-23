@@ -1,26 +1,32 @@
 import { nanoid } from "nanoid";
+import dotenv from 'dotenv';
+import { createClient } from 'redis';
+dotenv.config();
 
-import { init as stateInit, getAccounts as stateAccounts, getRates as stateRates, getLog as stateLog } from "./state.js";
-
-let accounts;
-let rates;
-let log;
-
-//call to initialize the exchange service
-export async function init() {
-  await stateInit();
-
-  accounts = stateAccounts();
-  rates = stateRates();
-  log = stateLog();
-}
+const client = createClient({
+  username: 'mario',
+  password: process.env.REDIS_PASSWORD, //'TParqsoft1!',
+  socket: {
+    host: 'redis-17076.c57.us-east-1-4.ec2.redns.redis-cloud.com',
+    port: 17076,
+  }
+});
 
 //returns all internal accounts
-export function getAccounts() {
-  return accounts;
+export async function getAccounts() {
+  try {
+    const dataString = await client.get("accounts"); // Retrieve string from Redis
+    if (dataString) {
+      return JSON.parse(dataString); // Convert string back to JSON
+    } else {
+      console.error(`No data found in Redis for key "${key}"`);
+    }
+  } catch (err) {
+    console.error(`Error loading data from Redis with key "${key}":`, err);
+  }
 }
 
-//sets balance for an account
+//sets balance for an account TODO!
 export function setAccountBalance(accountId, balance) {
   const account = findAccountById(accountId);
 
@@ -30,21 +36,47 @@ export function setAccountBalance(accountId, balance) {
 }
 
 //returns all current exchange rates
-export function getRates() {
-  return rates;
+export async function getRates() {
+  try {
+    const dataString = await client.get("rates"); // Retrieve string from Redis
+    if (dataString) {
+      return JSON.parse(dataString); // Convert string back to JSON
+    } else {
+      console.error(`No data found in Redis for key "${key}"`);
+    }
+  } catch (err) {
+    console.error(`Error loading data from Redis with key "${key}":`, err);
+  }
 }
 
 //returns the whole transaction log
-export function getLog() {
-  return log;
+export async function getLog() {
+  try {
+    const dataString = await client.get("logs"); // Retrieve string from Redis
+    if (dataString) {
+      return JSON.parse(dataString); // Convert string back to JSON
+    } else {
+      console.error(`No data found in Redis for key "${key}"`);
+    }
+  } catch (err) {
+    console.error(`Error loading data from Redis with key "${key}":`, err);
+  }
 }
 
 //sets the exchange rate for a given pair of currencies, and the reciprocal rate as well
-export function setRate(rateRequest) {
+export async function setRate(rateRequest) {
   const { baseCurrency, counterCurrency, rate } = rateRequest;
+  try {
+    const dataString = JSON.stringify(data); // Convert JSON to string
+    await client.set(key, dataString); // Store string in Redis
+  } catch (err) {
+    console.error(`Error saving data to Redis with key "${key}":`, err);
+  }
 
+  /*
   rates[baseCurrency][counterCurrency] = rate;
   rates[counterCurrency][baseCurrency] = Number((1 / rate).toFixed(5));
+  */
 }
 
 //executes an exchange operation
