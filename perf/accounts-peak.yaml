@@ -11,20 +11,19 @@ config:
   pool: 50 # All HTTP requests from all virtual users will be sent over the same connections
 
   phases:
-    - name: Ramp
+    - name: Warmup
+      duration: 30
+      arrivalRate: 10
+    - name: Peak Load
       duration: 60
-      arrivalRate: 1
-      rampTo: 25
-    - name: Steady
-      duration: 120
-      arrivalRate: 25
+      arrivalRate: 100
     - name: Cooldown
       duration: 30
-      arrivalRate: 25
-      rampTo: 1
+      arrivalRate: 100
+      rampTo: 10
 
 scenarios:
-  - name: Accounts - Base (/accounts)
+  - name: Accounts - Peak (/accounts)
     flow:
       - get:
           url: "/accounts"

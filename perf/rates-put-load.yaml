@@ -11,20 +11,16 @@ config:
   pool: 50 # All HTTP requests from all virtual users will be sent over the same connections
 
   phases:
-    - name: Ramp
-      duration: 60
-      arrivalRate: 1
-      rampTo: 25
-    - name: Steady
+    - name: Load
       duration: 120
       arrivalRate: 25
-    - name: Cooldown
-      duration: 30
-      arrivalRate: 25
-      rampTo: 1
 
 scenarios:
-  - name: Accounts - Base (/accounts)
+  - name: Set Rate - Load (PUT /rates)
     flow:
-      - get:
-          url: "/accounts"
+      - put:
+          url: "/rates"
+          json:
+            baseCurrency: "USD"
+            counterCurrency: "ARS"
+            rate: 950.5
