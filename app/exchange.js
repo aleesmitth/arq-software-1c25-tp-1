@@ -2,7 +2,15 @@ import { nanoid } from "nanoid";
 import dotenv from 'dotenv';
 import { createClient } from 'redis';
 import { Console } from "console";
+import StatsD from 'hot-shots';
+
 dotenv.config();
+
+const statsd = new StatsD({
+  host: 'graphite',
+  port: 8125,
+  prefix: 'exchange-service.',
+});
 
 const client = createClient({
   username: 'mario',
@@ -23,7 +31,7 @@ export async function getAccounts() {
   try {
     const dataString = await client.get(key);
     return JSON.parse(dataString);
-    
+
   } catch (err) {
     console.error(`Error loading data from Redis with key "${key}":`, err);
   }
@@ -131,7 +139,7 @@ export async function exchange(exchangeRequest) {
   }
   const counterAmount = baseAmount * exchangeRate;
 
-  
+
   let baseAccount = accounts.find(acc => acc.id == baseAccountId);
   let counterAccount = accounts.find(acc => acc.id == counterAccountId);
   if (!baseAccount||!counterAccount){
@@ -164,6 +172,12 @@ export async function exchange(exchangeRequest) {
 
         exchangeResult.ok = true;
         exchangeResult.counterAmount = counterAmount;
+
+        statsd.increment(`volume.total.${baseCurrency}`, Math.round(baseAmount * 100));
+        statsd.increment(`volume.net.${baseCurrency}`, Math.round(-baseAmount * 100));
+
+        statsd.increment(`volume.total.${counterCurrency}`, Math.round(counterAmount * 100));
+        statsd.increment(`volume.net.${counterCurrency}`, Math.round(counterAmount * 100));
       } else {
         //could not transfer to clients' counter account, return base amount to client
         await transfer(baseAccount.id, baseAccountId, baseAmount);

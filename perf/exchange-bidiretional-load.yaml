@@ -16,7 +16,7 @@ config:
       arrivalRate: 125
 
 scenarios:
-  - name: Exchange - Load (POST /exchange)
+  - name: Exchange (bidireccional) - Load (POST /exchange)
     flow:
       - post:
           url: "/exchange"
@@ -26,3 +26,11 @@ scenarios:
             baseAccountId: "1"
             counterAccountId: "2"
             baseAmount: 10000
+      - post:
+          url: "/exchange"
+          json:
+            baseCurrency: "USD"
+            counterCurrency: "ARS"
+            baseAccountId: "2"
+            counterAccountId: "1"
+            baseAmount: 10
