@@ -1,6 +1,9 @@
 import { fileURLToPath } from "url";
 import path from "path";
 import fs from "fs";
+import { createClient } from 'redis';
+import dotenv from 'dotenv';
+dotenv.config();
 
 let accounts = null;
 let rates = null;
@@ -9,9 +12,22 @@ let log = null;
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const ACCOUNTS = "./state/accounts.json";
-const RATES = "./state/rates.json";
-const LOG = "./state/log.json";
+const ACCOUNTS = "accounts";
+const RATES = "rates";
+const LOG = "log";
+
+const client = createClient({
+  username: 'mario',
+  password: process.env.REDIS_PASSWORD, //'TParqsoft1!',
+  socket: {
+    host: 'redis-17076.c57.us-east-1-4.ec2.redns.redis-cloud.com',
+    port: 17076,
+  }
+});
+
+client.on('error', err => console.error('Redis Client Error:', err));
+
+await client.connect();
 
 export async function init() {
   accounts = await load(ACCOUNTS);
@@ -35,6 +51,39 @@ export function getLog() {
   return log;
 }
 
+//Guarda en REDIS
+async function save(data, key) {
+  try {
+    const dataString = JSON.stringify(data); // Convert JSON to string
+    await client.set(key, dataString); // Store string in Redis
+  } catch (err) {
+    console.error(`Error saving data to Redis with key "${key}":`, err);
+  }
+}
+
+//Carga desde REDIS
+async function load(key) {
+  try {
+    const dataString = await client.get(key); // Retrieve string from Redis
+    if (dataString) {
+      return JSON.parse(dataString); // Convert string back to JSON
+    } else {
+      console.error(`No data found in Redis for key "${key}"`);
+    }
+  } catch (err) {
+    console.error(`Error loading data from Redis with key "${key}":`, err);
+  }
+}
+
+function scheduleSave(data, key, period) {
+  setInterval(async () => {
+    await save(data, key);
+  }, period);
+}
+
+
+/*
+//Carga desde ARCHIVO
 async function load(fileName) {
   const filePath = path.join(__dirname, fileName);
 
@@ -52,6 +101,8 @@ async function load(fileName) {
   }
 }
 
+
+//Guarda ARCHIVO
 async function save(data, fileName) {
   const filePath = path.join(__dirname, fileName);
   try {
@@ -61,8 +112,6 @@ async function save(data, fileName) {
   }
 }
 
-function scheduleSave(data, fileName, period) {
-  setInterval(async () => {
-    await save(data, fileName);
-  }, period);
-}
+
+
+*/

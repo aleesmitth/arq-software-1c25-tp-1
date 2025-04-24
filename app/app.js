@@ -1,7 +1,6 @@
 import express from "express";
 
 import {
-  init as exchangeInit,
   getAccounts,
   setAccountBalance,
   getRates,
@@ -10,7 +9,6 @@ import {
   exchange,
 } from "./exchange.js";
 
-await exchangeInit();
 
 const app = express();
 const port = 3000;
@@ -19,8 +17,10 @@ app.use(express.json());
 
 // ACCOUNT endpoints
 
-app.get("/accounts", (req, res) => {
-  res.json(getAccounts());
+app.get("/accounts", async (req, res) => {
+  let data = await getAccounts();
+  console.log(data);
+  res.json(data);
 });
 
 app.put("/accounts/:id/balance", (req, res) => {
@@ -38,8 +38,10 @@ app.put("/accounts/:id/balance", (req, res) => {
 
 // RATE endpoints
 
-app.get("/rates", (req, res) => {
-  res.json(getRates());
+app.get("/rates", async (req, res) => {
+  let data = await getRates();
+  console.log(data);
+  res.json(data);
 });
 
 app.put("/rates", (req, res) => {
@@ -57,8 +59,10 @@ app.put("/rates", (req, res) => {
 
 // LOG endpoint
 
-app.get("/log", (req, res) => {
-  res.json(getLog());
+app.get("/log", async (req, res) => {
+  let data = await getLog();
+  console.log(data);
+  res.json(data);
 });
 
 // EXCHANGE endpoint
