@@ -11,21 +11,17 @@ config:
   pool: 50 # All HTTP requests from all virtual users will be sent over the same connections
 
   phases:
-    - name: Ramp
-      duration: 60
-      arrivalRate: 1
-      rampTo: 25
-    - name: Steady
+    - name: Load
       duration: 120
-      arrivalRate: 25
-    - name: Cooldown
-      duration: 30
-      arrivalRate: 25
-      rampTo: 1
+      arrivalRate: 125
 
 scenarios:
-  - name: Exchange - Base (POST /exchange)
+  - name: Exchange - Load (POST /exchange)
     flow:
+      - put:
+          url: "/accounts/2/balance"
+          json:
+            balance: 100000
       - post:
           url: "/exchange"
           json:
