@@ -29,8 +29,8 @@ scenarios:
       - post:
           url: "/exchange"
           json:
-            baseCurrency: "USD"
-            counterCurrency: "ARS"
+            baseCurrency: "ARS"
+            counterCurrency: "USD"
             baseAccountId: "1"
             counterAccountId: "2"
             baseAmount: 100
