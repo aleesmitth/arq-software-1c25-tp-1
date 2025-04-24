@@ -92,6 +92,7 @@ app.post("/exchange", async (req, res) => {
   if (exchangeResult.ok) {
     res.status(200).json(exchangeResult);
   } else {
+    console.log("ERROR 500");
     res.status(500).json(exchangeResult);
   }
 });

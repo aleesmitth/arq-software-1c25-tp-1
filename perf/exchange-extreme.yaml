@@ -1,0 +1,47 @@
+config:
+  environments:
+    api:
+      target: "http://localhost:5555"
+
+  phases:
+    - name: Warmup
+      duration: 10
+      arrivalRate: 100
+    - name: Spike Up
+      duration: 20
+      arrivalRate: 300
+      rampTo: 1000
+    - name: Sustained Fire
+      duration: 60
+      arrivalRate: 1000
+    - name: Aftershock
+      duration: 30
+      arrivalRate: 1000
+      rampTo: 200
+    - name: Cooldown
+      duration: 20
+      arrivalRate: 200
+      rampTo: 0
+
+  http:
+    pool: 2000
+    timeout: 10
+    maxSockets: 5000
+
+  defaults:
+    headers:
+      content-type: application/json
+
+scenarios:
+  - name: Overkill (POST /exchange)
+    flow:
+      - loop:
+          - post:
+              url: "/exchange"
+              json:
+                baseCurrency: "ARS"
+                counterCurrency: "EUR"
+                baseAccountId: 1
+                counterAccountId: 3
+                baseAmount: 10
+        count: 100
