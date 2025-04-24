@@ -1,6 +1,7 @@
 import { nanoid } from "nanoid";
 import dotenv from 'dotenv';
 import { createClient } from 'redis';
+import { Console } from "console";
 dotenv.config();
 
 const client = createClient({
@@ -11,39 +12,46 @@ const client = createClient({
     port: 17076,
   }
 });
+client.on('error', err => console.error('Redis Client Error:', err));
+await client.connect();
+
 
 //returns all internal accounts
 export async function getAccounts() {
+  const key = "accounts";
+
   try {
-    const dataString = await client.get("accounts"); // Retrieve string from Redis
-    if (dataString) {
-      return JSON.parse(dataString); // Convert string back to JSON
-    } else {
-      console.error(`No data found in Redis for key "${key}"`);
-    }
+    const dataString = await client.get(key);
+    return JSON.parse(dataString);
+    
   } catch (err) {
     console.error(`Error loading data from Redis with key "${key}":`, err);
   }
 }
 
 //sets balance for an account TODO!
-export function setAccountBalance(accountId, balance) {
-  const account = findAccountById(accountId);
-
-  if (account != null) {
+export async function setAccountBalance(accountId, balance) {
+  let accounts = await getAccounts();
+  console.log(accounts)
+  const account = accounts.find(acc => acc.id == accountId);
+  if (account) {
     account.balance = balance;
+    const dataString = JSON.stringify(accounts);
+    await client.set("accounts", dataString); // Store string in Redis
+
+  }
+  else{
+    console.error(`Error looking for account of ID "${accountId}":`);
   }
 }
 
 //returns all current exchange rates
 export async function getRates() {
+  const key = "rates";
+
   try {
-    const dataString = await client.get("rates"); // Retrieve string from Redis
-    if (dataString) {
-      return JSON.parse(dataString); // Convert string back to JSON
-    } else {
-      console.error(`No data found in Redis for key "${key}"`);
-    }
+    const dataString = await client.get(key);
+    return JSON.parse(dataString);
   } catch (err) {
     console.error(`Error loading data from Redis with key "${key}":`, err);
   }
@@ -51,13 +59,11 @@ export async function getRates() {
 
 //returns the whole transaction log
 export async function getLog() {
+  const key = "logs";
+
   try {
-    const dataString = await client.get("logs"); // Retrieve string from Redis
-    if (dataString) {
-      return JSON.parse(dataString); // Convert string back to JSON
-    } else {
-      console.error(`No data found in Redis for key "${key}"`);
-    }
+    const dataString = await client.get(key);
+    return JSON.parse(dataString);
   } catch (err) {
     console.error(`Error loading data from Redis with key "${key}":`, err);
   }
@@ -67,36 +73,46 @@ export async function getLog() {
 export async function setRate(rateRequest) {
   const { baseCurrency, counterCurrency, rate } = rateRequest;
   try {
-    const dataString = JSON.stringify(data); // Convert JSON to string
-    await client.set(key, dataString); // Store string in Redis
+    let rates = await getRates();
+    if (!rates[baseCurrency]) {
+      rates[baseCurrency] = {};
+    }
+    if (!rates[counterCurrency]) {
+      rates[counterCurrency] = {};
+    }
+    rates[baseCurrency][counterCurrency] = rate;
+    rates[counterCurrency][baseCurrency] = Number((1 / rate).toFixed(5));
+    const dataString = JSON.stringify(rates);
+    await client.set("rates", dataString); // Store string in Redis
   } catch (err) {
-    console.error(`Error saving data to Redis with key "${key}":`, err);
+    console.error(`Error saving data to Redis with key "${"rates"}":`, err);
   }
-
-  /*
-  rates[baseCurrency][counterCurrency] = rate;
-  rates[counterCurrency][baseCurrency] = Number((1 / rate).toFixed(5));
-  */
 }
+
+export async function putLog(log) {
+  try{
+    const dataString = JSON.stringify(log);
+    await client.set("logs", dataString); // Store string in Redis
+  } catch (err) {
+    console.error(`Error saving data to Redis with key "${"logs"}":`, err);
+  }
+}
+
 
 //executes an exchange operation
 export async function exchange(exchangeRequest) {
   const {
     baseCurrency,
     counterCurrency,
-    baseAccountId: clientBaseAccountId,
-    counterAccountId: clientCounterAccountId,
+    baseAccountId,
+    counterAccountId,
     baseAmount,
   } = exchangeRequest;
 
-  //get the exchange rate
+  let rates = await getRates();
+  let accounts = await getAccounts();
   const exchangeRate = rates[baseCurrency][counterCurrency];
-  //compute the requested (counter) amount
-  const counterAmount = baseAmount * exchangeRate;
-  //find our account on the provided (base) currency
-  const baseAccount = findAccountByCurrency(baseCurrency);
-  //find our account on the counter currency
-  const counterAccount = findAccountByCurrency(counterCurrency);
+  console.log("exchange rate: ", exchangeRate);
 
   //construct the result object with defaults
   const exchangeResult = {
@@ -109,6 +125,66 @@ export async function exchange(exchangeRequest) {
     obs: null,
   };
 
+  if(!exchangeRate){
+    exchangeResult.obs = "Error, exchange rate unknown";
+    return exchangeResult;
+  }
+  const counterAmount = baseAmount * exchangeRate;
+
+  
+  let baseAccount = accounts.find(acc => acc.id == baseAccountId);
+  let counterAccount = accounts.find(acc => acc.id == counterAccountId);
+  if (!baseAccount||!counterAccount){
+    exchangeResult.obs = "Error withdrawing one of the accounts";
+    return exchangeResult;
+  }
+  if (baseAccount.currency!=baseCurrency || counterAccount.currency!=counterCurrency){
+    //console.log(baseAccount.currency, baseCurrency);
+    exchangeResult.obs = "Error, the currency on the base is not the account in the database";
+    return exchangeResult;
+  }
+  // console.log(baseAccount, counterAccount);
+  if (counterAccount.balance < counterAmount) {
+    exchangeResult.obs = "Error, not enough amount on counter account";
+    return exchangeResult;
+  }
+
+  if (counterAccount.balance >= counterAmount) {
+    //try to transfer from clients' base account
+    if (await transfer(baseAccountId, baseAccount.id, baseAmount)) {
+      //try to transfer to clients' counter account
+      if (
+        await transfer(counterAccount.id, counterAccountId, counterAmount)
+      ) {
+        //all good, update balances
+        baseAccount.balance += baseAmount;
+        counterAccount.balance -= counterAmount;
+        const dataString = JSON.stringify(accounts);
+        await client.set("accounts", dataString); // Store string in Redis
+
+        exchangeResult.ok = true;
+        exchangeResult.counterAmount = counterAmount;
+      } else {
+        //could not transfer to clients' counter account, return base amount to client
+        await transfer(baseAccount.id, baseAccountId, baseAmount);
+        exchangeResult.obs = "Could not transfer to clients' account";
+      }
+    } else {
+      //could not withdraw from clients' account
+      exchangeResult.obs = "Could not withdraw from clients' account";
+    }
+  } else {
+    //not enough funds on internal counter account
+    exchangeResult.obs = "Not enough funds on counter currency account";
+  }
+
+  //log the transaction and return it
+  putLog(exchangeResult);
+  return exchangeResult;
+
+
+
+  /*
   //check if we have funds on the counter currency account
   if (counterAccount.balance >= counterAmount) {
     //try to transfer from clients' base account
@@ -139,7 +215,8 @@ export async function exchange(exchangeRequest) {
   //log the transaction and return it
   log.push(exchangeResult);
 
-  return exchangeResult;
+  */
+
 }
 
 // internal - call transfer service to execute transfer between accounts
@@ -149,24 +226,4 @@ async function transfer(fromAccountId, toAccountId, amount) {
   return new Promise((resolve) =>
     setTimeout(() => resolve(true), Math.random() * (max - min + 1) + min)
   );
-}
-
-function findAccountByCurrency(currency) {
-  for (let account of accounts) {
-    if (account.currency == currency) {
-      return account;
-    }
-  }
-
-  return null;
-}
-
-function findAccountById(id) {
-  for (let account of accounts) {
-    if (account.id == id) {
-      return account;
-    }
-  }
-
-  return null;
 }
